@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 60%);
+  color: #0f172a;
+}
+
+.leaflet-container {
+  background: #cfe2f3;
+}
