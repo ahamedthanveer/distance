@@ -16,8 +16,8 @@ Routing engine:
   - Later: Searoutes.com REST API (chartering-grade), automatically used when
     SEAROUTES_API_KEY env var is set. Falls back to searoute-py otherwise.
 
-Cache layer (Upstash Redis REST, optional):
-  - Enabled when both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set.
+Cache layer (Redis, optional):
+  - Enabled when REDIS_URL env var is set (any standard redis:// or rediss:// URL).
   - Key:   leg:v1:<engine>:<unlocode_a>-<unlocode_b>   (codes sorted lexicographically)
   - Value: JSON of {distance_km, geometry, canals, mode, warnings, ts, engine, ...}
   - Distance is symmetric, so requests in either direction hit the same key;
@@ -30,19 +30,38 @@ import json
 import os
 import time
 import traceback
-import urllib.parse
-import urllib.request
 from math import radians, sin, cos, asin, sqrt, atan2
 
 import searoute as sr
+
+try:
+    import redis as _redis  # type: ignore
+except Exception:
+    _redis = None
 
 EARTH_KM = 6371.0088
 KM_TO_NM = 0.539957
 
 CACHE_VERSION = "v1"
 SEAROUTES_API_KEY = os.environ.get("SEAROUTES_API_KEY", "").strip()
-UPSTASH_URL = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
-UPSTASH_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip()
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+
+# Module-level Redis client — reused across warm invocations of the same
+# serverless instance. Cold start pays the connect cost once.
+_redis_client = None
+if REDIS_URL and _redis is not None:
+    try:
+        _redis_client = _redis.from_url(
+            REDIS_URL,
+            socket_timeout=3,
+            socket_connect_timeout=3,
+            decode_responses=True,
+        )
+        # Ping eagerly so we fail fast at module import if the URL is wrong;
+        # ignored failures simply leave the cache disabled.
+        _redis_client.ping()
+    except Exception:
+        _redis_client = None
 
 
 # ---------------------------------------------------------------------------
@@ -146,11 +165,11 @@ def run_engine(origin, destination):
 
 
 # ---------------------------------------------------------------------------
-# Cache (Upstash Redis REST, optional)
+# Cache (Redis, optional)
 # ---------------------------------------------------------------------------
 
 def cache_enabled():
-    return bool(UPSTASH_URL and UPSTASH_TOKEN)
+    return _redis_client is not None
 
 
 def cache_key(engine, a_code, b_code):
@@ -158,35 +177,25 @@ def cache_key(engine, a_code, b_code):
     return f"leg:{CACHE_VERSION}:{engine}:{a}-{b}"
 
 
-def _upstash_request(path):
-    req = urllib.request.Request(
-        f"{UPSTASH_URL}{path}",
-        headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=4) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception:
-        return None
-
-
 def cache_get(key):
-    if not cache_enabled():
-        return None
-    body = _upstash_request(f"/get/{urllib.parse.quote(key, safe='')}")
-    if not body or body.get("result") in (None, ""):
+    if _redis_client is None:
         return None
     try:
-        return json.loads(body["result"])
+        raw = _redis_client.get(key)
+        if not raw:
+            return None
+        return json.loads(raw)
     except Exception:
         return None
 
 
 def cache_set(key, value):
-    if not cache_enabled():
+    if _redis_client is None:
         return
-    encoded = urllib.parse.quote(json.dumps(value, separators=(",", ":")), safe="")
-    _upstash_request(f"/set/{urllib.parse.quote(key, safe='')}/{encoded}")
+    try:
+        _redis_client.set(key, json.dumps(value, separators=(",", ":")))
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

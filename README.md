@@ -30,15 +30,17 @@ The backend automatically picks an engine based on env vars:
 
 The cache key is namespaced per engine, so switching engines never returns cached lower-quality results.
 
-## Cache (Upstash Redis)
+## Cache (Redis)
 
 Without cache configured, every leg recomputes on every call (fine for `searoute-py` which is local; expensive once you switch to `searoutes-com`).
 
 To enable shared persistent caching:
 
-1. In the Vercel dashboard for this project: **Storage → Marketplace → Upstash → For Redis** → create a free database.
-2. Vercel auto-injects `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars into both Production and Preview.
+1. In the Vercel dashboard for this project: **Storage → Connect Database → Redis** (any provider — Vercel KV, Redis Cloud, Upstash, self-hosted).
+2. Vercel auto-injects a `REDIS_URL` env var into Production and Preview.
 3. Redeploy. The `/api/distance` `GET` endpoint will then report `"cacheEnabled": true`.
+
+The backend uses the standard `redis` Python client over the connection string — works with any Redis-compatible store.
 
 Cache entries:
 - Key: `leg:v1:<engine>:<unlocode_a>-<unlocode_b>` (UN/LOCODEs sorted alphabetically)
