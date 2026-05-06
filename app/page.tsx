@@ -37,12 +37,13 @@ export default function Home() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch("/api/route", {
+      if (!o || !d) throw new Error("Pick both ports first");
+      const res = await fetch("/api/distance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          origin,
-          destination,
+          origin: o,
+          destination: d,
           speedKnots: speed,
           fuelTpd: fuel,
           bunkerUsd: bunker,

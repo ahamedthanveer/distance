@@ -12,11 +12,13 @@ On top of pure distance, the calculator also estimates **voyage duration**, **bu
 
 ## Tech
 
-- **Next.js 14** (App Router) – React + serverless API
-- **searoute-ts** – Dijkstra over a global marine network
+- **Next.js 14** (App Router) – React frontend, served from Vercel
+- **Python serverless function** (`api/distance.py`) using the
+  [`searoute`](https://pypi.org/project/searoute/) package – denser maritime
+  network than the JS port, with proper Suez/Panama transits
 - **React-Leaflet / OpenStreetMap** – map rendering
 - **TailwindCSS** – styling
-- Deploys to **Vercel** out of the box
+- Deploys to **Vercel** out of the box (Next.js + Python runtime)
 
 ## Getting started
 
@@ -33,19 +35,22 @@ This repo is wired for **Vercel**. Push to `main` and import the repo in Vercel 
 
 ## API
 
-`POST /api/route`
+`POST /api/distance`
 
 ```json
 {
-  "origin":      "CNSHA",
-  "destination": "NLRTM",
+  "origin":      {"lat": 31.2304, "lon": 121.4737, "name": "Shanghai", "country": "China", "unlocode": "CNSHA"},
+  "destination": {"lat": 51.9496, "lon":   4.1453, "name": "Rotterdam", "country": "Netherlands", "unlocode": "NLRTM"},
   "speedKnots":  14,
   "fuelTpd":     25,
   "bunkerUsd":   600
 }
 ```
 
-Returns distance (km / nm / mi), voyage hours/days, fuel and a route GeoJSON LineString.
+Returns distance (km / nm / mi), voyage hours/days, fuel cost, canal transit
+flags and a GeoJSON LineString of the routed path. Falls back to a
+great-circle line with a `warnings` field when the maritime graph can't
+connect the pair.
 
 ## Disclaimer
 
