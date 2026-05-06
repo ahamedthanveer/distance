@@ -11,3 +11,5 @@ dist
 tsconfig.tsbuildinfo
 
 .vercel
+__pycache__/
+*.pyc
